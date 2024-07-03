@@ -8,7 +8,7 @@
         {
             bool noBackups = false;
             bool customClientEventMode = false;
-            string empty = string.Empty;
+            
             if (args.Length == 0 || args[0].Contains("help"))
             {
                 Console.WriteLine(_prompt);
@@ -69,11 +69,8 @@
                             version = new int?(int.Parse(args[argIndex++]));
                         }
 
-                        if (from == "*" && mode == "replace")
-                            throw new Exception("To replace a device / client events you must specify a source profile");
-
-                        if (mode == "replace" && to == null)
-                            throw new Exception("No target profile specified");
+                        if (from == "*" && mode == "replace") throw new Exception("To replace a device / client events you must specify a source profile");
+                        if (mode == "replace" && to == null) throw new Exception("No target profile specified");
 
                         Profile fromProfile = from != "*" ? new Profile(from) : null;
                         List<string> toProfiles = new List<string>();
