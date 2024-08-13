@@ -16,7 +16,7 @@ namespace DeviceManager
         {
             _eventNode = eventNode;
             Name = eventNode.Attributes["Name"].Value;
-            EventID = eventNode.Attributes["EventId"].Value;
+            EventID = eventNode.Attributes["EventId"]?.Value ?? eventNode.Attributes["EventID"].Value;
             SubCategory = eventNode.Attributes["SubCategory"].Value;
         }
     }
