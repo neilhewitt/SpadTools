@@ -1,4 +1,4 @@
-﻿namespace DeviceManager
+﻿namespace ProfileManager
 {
     public interface IOutput
     {

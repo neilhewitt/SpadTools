@@ -1,20 +1,28 @@
 ﻿using System.Xml;
 
-namespace DeviceManager
+namespace ProfileManager
 {
     public class Profile
     {
+        public static XmlNamespaceManager NS { get; set; }
+
         private string _path;
         private XmlDocument _profile;
-        private XmlNamespaceManager _ns;
         private IList<Device> _devices;
         private IList<CustomClientEvent> _customClientEvents;
-        private IDictionary<string, (string VendorId, string ProductId, int DeviceIndex, int Version)> _nickNames;
+        private IDictionary<string, (string VendorId, string ProductId, int DeviceIndex, int Version)> _nickNames = new Dictionary<string, (string, string, int, int)>();
 
         public string Path => _path;
         public string Name => System.IO.Path.GetFileNameWithoutExtension(_path);
 
         public IEnumerable<Device> Devices => _devices;
+
+        public XmlDocument Document => _profile;
+
+        public Device GetDevice(string nickname)
+        {
+            return Devices.FirstOrDefault(d => d.Nickname is not null && d.Nickname.ToLower() == nickname.ToLower());
+        }
 
         public IEnumerable<DeviceComparison> CompareWith(Profile profile)
         {
@@ -30,13 +38,17 @@ namespace DeviceManager
         public bool ReplaceDevice(Device replacement)
         {
             string xpath = $"//ns:Device[@VendorID='{replacement.VendorID}' and @ProductID='{replacement.ProductID}' and @DeviceIndex='{replacement.DeviceIndex}' and @Version='{replacement.Version}']";
-            XmlNode node = _profile.SelectSingleNode(xpath, _ns);
+            XmlNode node = _profile.SelectSingleNode(xpath, NS);
             if (node == null)
             {
                 XmlNode newNode = replacement.Node.CloneNode(true);
                 newNode = _profile.ImportNode(newNode, true);
-                _profile.DocumentElement.ChildNodes[0].ChildNodes[0].AppendChild(newNode);
-                _devices.Add(new Device(newNode));
+                
+                xpath = "//ns:Devices";
+                XmlNode devicesNode = _profile.SelectSingleNode(xpath, NS);
+
+                devicesNode.AppendChild(newNode);
+                _devices.Add(new Device(newNode, this));
                 MapNicknames();
             }
             else
@@ -46,10 +58,11 @@ namespace DeviceManager
             
             return true;
         }
+
         public bool DeleteDevice(Device device)
         {
             string xpath = $"//ns:Device[@VendorID='{device.VendorID}' and @ProductID='{device.ProductID}' and @DeviceIndex='{device.DeviceIndex}' and @Version='{device.Version}']";
-            XmlNode node = _profile.SelectSingleNode(xpath, _ns);
+            XmlNode node = _profile.SelectSingleNode(xpath, NS);
             if (node == null) return false;
             node.ParentNode.RemoveChild(node);
             _devices.Remove(device);
@@ -60,7 +73,7 @@ namespace DeviceManager
         public bool ReplaceCustomClientEvent(CustomClientEvent replacement)
         {
             string xpath = $"//ns:CustomClientEvent[@Name='{replacement.Name}' and @EventID='{replacement.EventID}' and @SubCategory='{replacement.SubCategory}']";
-            XmlNode node = _profile.SelectSingleNode(xpath, _ns);
+            XmlNode node = _profile.SelectSingleNode(xpath, NS);
             if (node == null) return false;
             node.InnerXml = replacement.InnerXml;
             
@@ -70,11 +83,11 @@ namespace DeviceManager
         public bool ReplaceAllCustomClientEvents(Profile source)
         {
             string xpath = "//ns:CustomClientEvents";
-            XmlNode sourceNode = source._profile.SelectSingleNode(xpath, source._ns);
-            XmlNode thisNode = _profile.SelectSingleNode(xpath, _ns);
+            XmlNode sourceNode = source._profile.SelectSingleNode(xpath, NS);
+            XmlNode thisNode = _profile.SelectSingleNode(xpath, NS);
             if (thisNode == null)
             {
-                thisNode = (XmlNode)_profile.CreateElement("CustomClientEvents", _ns.LookupNamespace("ns"));
+                thisNode = (XmlNode)_profile.CreateElement("CustomClientEvents", NS.LookupNamespace("ns"));
                 _profile.DocumentElement.AppendChild(thisNode);
             }
             thisNode.InnerXml = sourceNode.InnerXml;
@@ -83,7 +96,7 @@ namespace DeviceManager
 
         public bool DeleteAllCustomClientEvents()
         {
-            XmlNode node = _profile.SelectSingleNode("//ns:CustomClientEvents", _ns);
+            XmlNode node = _profile.SelectSingleNode("//ns:CustomClientEvents", NS);
             if (node == null) return false;
             node.InnerXml = "";
             return true;
@@ -119,57 +132,69 @@ namespace DeviceManager
 
         public Profile(string profilePath, string nicknamesFile)
         {
-            if (nicknamesFile != null && File.Exists(nicknamesFile))
+            if (nicknamesFile != null)
             {
-                _nickNames = new Dictionary<string, (string, string, int, int)>();
-                string[] lines = File.ReadAllLines(nicknamesFile);
-                foreach (string line in lines)
+                string nickLocal = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(profilePath), nicknamesFile);
+                if (File.Exists(nickLocal))
                 {
-                    string[] parts = line.Split('=');
-                    if (parts.Length == 2)
-                    {
-                        string nickname = parts[0];
-                        string[] deviceParts = parts[1].Split(',');
-                        if (deviceParts.Length > 1)
-                        {
-                            string vendorID = deviceParts[0];
-                            string productID = deviceParts[1];
-                            int deviceIndex = deviceParts.Length == 3 ? int.Parse(deviceParts[2]) : -1;
-                            int version = deviceParts.Length == 4 ? int.Parse(deviceParts[3]) : -1;
+                    nicknamesFile = nickLocal;
+                }
+                else
+                {
+                    nicknamesFile = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location), nicknamesFile);
+                }
 
-                            _nickNames.Add(nickname, (vendorID, productID, deviceIndex, version));
+                if (File.Exists(nicknamesFile))
+                {
+                    string[] lines = File.ReadAllLines(nicknamesFile);
+                    foreach (string line in lines)
+                    {
+                        string[] parts = line.Split('=');
+                        if (parts.Length == 2)
+                        {
+                            string nickname = parts[0];
+                            string[] deviceParts = parts[1].Split(',');
+                            if (deviceParts.Length > 1)
+                            {
+                                string vendorID = deviceParts[0];
+                                string productID = deviceParts[1];
+                                int deviceIndex = deviceParts.Length == 3 ? int.Parse(deviceParts[2]) : -1;
+                                int version = deviceParts.Length == 4 ? int.Parse(deviceParts[3]) : -1;
+
+                                _nickNames.Add(nickname, (vendorID, productID, deviceIndex, version));
+                            }
                         }
                     }
                 }
             }
 
-            // fix path casing
-            if (File.Exists(profilePath))
+            if (!System.IO.Path.HasExtension(profilePath))
             {
-                string[] files = Directory.GetFiles(Directory.GetCurrentDirectory()).Select(x => System.IO.Path.GetFileName(x)).ToArray();
-                profilePath = files.FirstOrDefault(x => x.ToLower() == profilePath.ToLower());
+                profilePath += ".xml";
             }
-            else
-            {
-                throw new FileNotFoundException("Profile not found", profilePath);
-            }   
 
-            _path = profilePath;
             _profile = new XmlDocument();
             _profile.Load(profilePath);
 
-            _ns = new XmlNamespaceManager(_profile.NameTable);
-            _ns.AddNamespace("ns", "http://www.fsgs.com/SPAD");
+            // have to go through a complicated process to get the correctly-cased path
+            // since this will be used to derive the profile name which is used in output a lot
+            string directory = System.IO.Path.GetDirectoryName(profilePath);
+            if (directory == "") directory = Directory.GetCurrentDirectory();
+            profilePath = System.IO.Path.GetFullPath(profilePath);
+            _path = Directory.EnumerateFiles(directory).FirstOrDefault(x => x.ToLower() == profilePath.ToLower());
+
+            NS = new XmlNamespaceManager(_profile.NameTable);
+            NS.AddNamespace("ns", "http://www.fsgs.com/SPAD");
 
             _devices = new List<Device>();
-            XmlNodeList deviceNodes = _profile.SelectNodes("//ns:Device", _ns);
+            XmlNodeList deviceNodes = _profile.SelectNodes("//ns:Device", NS);
             for (int i = 0; i < deviceNodes.Count; i++)
             {
-                _devices.Add(new Device(deviceNodes[i]));
+                _devices.Add(new Device(deviceNodes[i], this));
             }
 
             _customClientEvents = new List<CustomClientEvent>();
-            XmlNodeList customClientEventNodes = _profile.SelectNodes("//ns:CustomClientEvent", _ns);
+            XmlNodeList customClientEventNodes = _profile.SelectNodes("//ns:CustomClientEvent", NS);
             for (int i = 0; i < customClientEventNodes.Count; i++)
             {
                 _customClientEvents.Add(new CustomClientEvent(customClientEventNodes[i]));

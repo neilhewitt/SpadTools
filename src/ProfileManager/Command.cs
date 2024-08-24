@@ -1,4 +1,4 @@
-﻿namespace DeviceManager
+﻿namespace ProfileManager
 {
     public class Command
     {
@@ -20,7 +20,7 @@
         {
             for (int i = 0; i < Arguments.Length; i++)
             {
-                string argument = Arguments[i].ToLower();
+                string argument = Arguments[i];
                 if (argument.Matches(argumentName, shortArgumentName))
                 {
                     if (argument.Contains(':'))
@@ -68,19 +68,19 @@
             {
                 path = Environment.CurrentDirectory;
             }
-            else if (!Directory.Exists(path) && File.Exists(path))
+            else if (!Directory.Exists(path) && (File.Exists(path) || File.Exists(path + ".xml")))
             {
                 return new[] { path };
             }
 
-            return (Directory.GetFiles(path, "*.xml")).Select(x => Path.GetFileName(x.ToLower()));
+            return (Directory.GetFiles(path, "*.xml")).Select(x => x.ToLower());
         }
 
 
         private void DisplayHelp()
         {
-            _output.WriteLine("@Green{Usage: DeviceManager [--debug|-d] --operation|-o:<compare|replace|delete> [--nobackups|-nb]}");
-            _output.WriteLine("  --debug|-d                  Pause for ENTER key at start to allow debugger attachment");
+            _output.WriteLine("@Green{Usage: ProfileManager [--debug|-d] --operation|-o:<compare|replace|delete> [--nobackups|-nb]}");
+            _output.WriteLine("  --debug|-dbg                Pause for ENTER key at start to allow debugger attachment");
             _output.WriteLine("  --operation|-o:<operation>  The operation to perform.");
             _output.WriteLine("  --nobackups|-nb             Don't make backups before changing files.");
         }
@@ -121,12 +121,12 @@
                     return;
                 }
 
-                if (TryGetArgumentValue("debug", "d", out _))
+                if (TryGetArgumentValue("debug", "dbg", out _))
                 {
                     validArguments = true;
                     Debug = true;
-                    RemoveArgument("debug", "d");
-                    output.WriteLine("Debug mode: Attach to DeviceManager.exe process in the debugger and press ENTER");
+                    RemoveArgument("debug", "dbg");
+                    output.WriteLine("Debug mode: Attach to ProfileManager.exe process in the debugger and press ENTER");
                     output.WaitForUser();
                 }
 
@@ -141,6 +141,7 @@
                         "delete" => Operation.Delete,
                         _ => Operation.Invalid
                     };
+                    if (Operation == Operation.Invalid) DisplayHelp();
                     RemoveArgument("operation", "o");
                 }
 

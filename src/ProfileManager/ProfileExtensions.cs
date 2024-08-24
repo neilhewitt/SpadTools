@@ -1,4 +1,6 @@
-﻿namespace DeviceManager
+﻿using System.Xml;
+
+namespace ProfileManager
 {
     public static class ProfileExtensions
     {
@@ -14,9 +16,10 @@
                 );
         }
 
-        public static Device GetDevice(this Profile profile, string nickname)
+        public static IEnumerable<T> Project<T>(this XmlNode node, string name, Func<XmlNode, T> builder)
         {
-            return profile.Devices.FirstOrDefault(d => d.Nickname is not null && d.Nickname.ToLower() == nickname.ToLower());
+            string xpath = $".//ns:{name}";
+            return node.SelectNodes(xpath, Profile.NS).Cast<XmlNode>().Select(x => builder(x));
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿namespace DeviceManager
+﻿namespace ProfileManager
 {
     public static class CommandExtensions
     {

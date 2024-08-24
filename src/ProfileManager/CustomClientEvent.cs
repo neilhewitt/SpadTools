@@ -1,6 +1,6 @@
 ﻿using System.Xml;
 
-namespace DeviceManager
+namespace ProfileManager
 {
     public class CustomClientEvent
     {

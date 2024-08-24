@@ -1,4 +1,4 @@
-﻿namespace DeviceManager
+﻿namespace ProfileManager
 {
     public class Comparer
     {
@@ -30,6 +30,11 @@
 
                 SourceProfilePath = command.TryGetArgumentValue("source", "s", out string sourcePath) ? sourcePath : throw new ArgumentException("Source profile path is required.");
                 TargetProfilePath = command.TryGetArgumentValue("target", "t", out string targetPath) ? targetPath : "*";
+
+                // need to turn these into fully-qualified paths
+                SourceProfilePath = Path.GetFullPath(SourceProfilePath);
+                TargetProfilePath = TargetProfilePath == "*" ? Path.GetDirectoryName(SourceProfilePath) : Path.GetFullPath(TargetProfilePath);
+
                 CSVPath = command.TryGetArgumentValue("csv", "c", out string csv) ? csv : null;
                 bool displayOutput = !command.HasArgument("nodisplay", "nd");
 
@@ -39,6 +44,9 @@
                 {
                     throw new ArgumentException("No target profiles available (source and target cannot be the same).");
                 }
+
+                Output.WriteLine($"Using source profile @Blue{{{SourceProfilePath}}}");
+                Output.WriteLine($"Using target profile folder @Blue{{{TargetProfilePath}}}");
 
                 Profile source = new Profile(SourceProfilePath, "nicknames.txt");
                 List<ProfileComparison> comparisons = new();
@@ -73,10 +81,10 @@
 
         private void DisplayHelp()
         {
-            Output.WriteLine("@Green{Usage: DeviceManager --operation|-o:compare --source|-s:<source> [--target|-t:<target>] [--csv|-c:<path>] [-nodisplay]}");
+            Output.WriteLine("@Green{Usage: ProfileManager --operation|-o:compare --source|-s:<source> [--target|-t:<target>] [--csv|-c:<path>] [-nodisplay]}");
             Output.WriteLine("  --source|-s:<source>  The profile to compare with.");
             Output.WriteLine("  --target|-t:<target>  The profile to compare against (or all if not specified).");
-            Output.WriteLine("  --csv|-c:<path>        The path to write the CSV output to.");
+            Output.WriteLine("  --csv|-c:<path>       The path to write the CSV report to (if none, no CVS report is written).");
             Output.WriteLine("  --nodisplay|-nd       Suppress output to the console.");
         }
 
