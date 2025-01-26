@@ -1,6 +1,6 @@
 ﻿using System.Xml;
 
-namespace ProfileManager
+namespace ProfileManager.Profiles
 {
     public class Event
     {

@@ -1,9 +1,43 @@
-﻿using System.Xml;
+﻿using ProfileManager.Devices;
+using System.Linq;
+using System.Xml;
 
-namespace ProfileManager
+namespace ProfileManager.Profiles
 {
     public class Profile
     {
+        public static IEnumerable<Profile> GetProfiles(string path)
+        {
+            if (path == "*")
+            {
+                path = Directory.GetCurrentDirectory();
+            }
+
+            if (!Directory.Exists(path))
+            {
+                throw new FileNotFoundException($"Directory not found: {path}");
+            }
+
+            foreach (var profilePath in Directory.GetFiles(path).Where(x => x.EndsWith(".xml")))
+            {
+                Profile profile = null;
+                try
+                {
+                    profile = new(profilePath, Profile.DEFAULT_NICKNAMES_FILENAME);
+                }
+                catch
+                {
+                    // do nothing, we'll just skip this XML file
+                }
+
+                if (profile is not null)
+                {
+                    yield return profile;
+                }
+            }
+        }
+
+        public static string DEFAULT_NICKNAMES_FILENAME = "nicknames.txt";
         public static XmlNamespaceManager NS { get; set; }
 
         private string _path;
@@ -16,12 +50,32 @@ namespace ProfileManager
         public string Name => System.IO.Path.GetFileNameWithoutExtension(_path);
 
         public IEnumerable<Device> Devices => _devices;
+        public IEnumerable<CustomClientEvent > CustomClientEvents => _customClientEvents;
 
         public XmlDocument Document => _profile;
 
-        public Device GetDevice(string nickname)
+        public Device GetDevice(string id)
         {
-            return Devices.FirstOrDefault(d => d.Nickname is not null && d.Nickname.ToLower() == nickname.ToLower());
+            Device device = Devices.FirstOrDefault(d => d.Nickname is not null && d.Nickname.ToLower() == id.ToLower());
+            if (device is null)
+            {
+                string[] idParts = id.Split(',', StringSplitOptions.RemoveEmptyEntries);
+                if (idParts.Length == 4)
+                {
+                    string vendorID = idParts[0];
+                    string productID = idParts[1];
+                    int deviceIndex = int.Parse(idParts[2]);
+                    int version = int.Parse(idParts[3]);
+                    device = Devices.SingleOrDefault(d => d.VendorID == vendorID && d.ProductID == productID && d.DeviceIndex == deviceIndex && d.Version == version);
+                    return device;
+                }
+                else
+                {
+                    throw new FormatException("Invalid device ID format. Must be '{VendorID},{ProductID},{DeviceIndex},{Version}' and VendorId and ProductID must be in hex format '0xXXXX'.");
+                }
+            }
+
+            return null;
         }
 
         public IEnumerable<DeviceComparison> CompareWith(Profile profile)
@@ -33,6 +87,13 @@ namespace ProfileManager
 
                 yield return comparison;
             }
+        }
+
+        public IEnumerable<DeviceComparison> CompareWith(Profile profile, Device device)
+        {
+            Device otherDevice = profile.Devices.FirstOrDefault(d => d.VendorID == device.VendorID && d.ProductID == device.ProductID && d.DeviceIndex == device.DeviceIndex);
+            DeviceComparison comparison = new DeviceComparison(device, otherDevice);
+            return new List<DeviceComparison> { comparison };
         }
 
         public bool ReplaceDevice(Device replacement)
@@ -54,6 +115,7 @@ namespace ProfileManager
             else
             {
                 node.InnerXml = replacement.InnerXml;
+                node.Attributes["DevicePath"].Value = replacement.DevicePath;
             }
             
             return true;
@@ -175,6 +237,11 @@ namespace ProfileManager
 
             _profile = new XmlDocument();
             _profile.Load(profilePath);
+
+            if (!_profile.DocumentElement.OuterXml.Contains("xmlns=\"http://www.fsgs.com/SPAD\""))
+            {
+               throw new FormatException("Not a Spad.neXt profile.");
+            }
 
             // have to go through a complicated process to get the correctly-cased path
             // since this will be used to derive the profile name which is used in output a lot

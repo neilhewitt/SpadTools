@@ -1,8 +1,10 @@
-﻿namespace ProfileManager
+﻿namespace ProfileManager.Output
 {
     public class ConsoleOutput : IOutput
     {
         private string _controlCode;
+
+        public string WaitPrompt => "press ENTER";
 
         public Action<string> Write => (message) => WriteToConsole(message);
 

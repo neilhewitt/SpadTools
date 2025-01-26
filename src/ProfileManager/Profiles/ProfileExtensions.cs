@@ -1,6 +1,7 @@
 ﻿using System.Xml;
+using ProfileManager.Devices;
 
-namespace ProfileManager
+namespace ProfileManager.Profiles
 {
     public static class ProfileExtensions
     {

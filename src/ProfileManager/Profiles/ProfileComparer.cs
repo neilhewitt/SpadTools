@@ -1,11 +1,18 @@
-﻿namespace ProfileManager
+﻿using ProfileManager.Commands;
+using ProfileManager.Devices;
+using ProfileManager.Output;
+
+namespace ProfileManager.Profiles
 {
-    public class Comparer
+    public class ProfileComparer
     {
         public IOutput Output { get; init; }
         public string SourceProfilePath { get; private set; }
         public string TargetProfilePath { get; private set; }
         public string CSVPath { get; private set; }
+        public string DeviceId { get; private set; }
+        public ComparisonResult? Filter { get; private set; }
+        public bool DisplayOutput { get; private set; }
 
         public void Compare(Command command)
         {
@@ -20,44 +27,31 @@
                  * 
                  */
 
-                if (command.HasArgument("help", "h") || command.HasNoArguments)
+                TargetProfilePath = Command.GetFullPath(TargetProfilePath, out bool isFolder);
+                List<string> targetProfilePaths = Command.GetProfilePaths(TargetProfilePath).ToList();
+                
+                targetProfilePaths.Remove(SourceProfilePath);
+                if (targetProfilePaths.Count == 0)
                 {
-                    DisplayHelp();
+                    Output.WriteLine($"No target profiles available in @Blue{{{TargetProfilePath}}}.");
                     return;
                 }
 
-                Output.WriteLine("Spad.neXt Profile Comparer (c)2024 Neil Hewitt");
-
-                SourceProfilePath = command.TryGetArgumentValue("source", "s", out string sourcePath) ? sourcePath : throw new ArgumentException("Source profile path is required.");
-                TargetProfilePath = command.TryGetArgumentValue("target", "t", out string targetPath) ? targetPath : "*";
-
-                // need to turn these into fully-qualified paths
-                SourceProfilePath = Path.GetFullPath(SourceProfilePath);
-                TargetProfilePath = TargetProfilePath == "*" ? Path.GetDirectoryName(SourceProfilePath) : Path.GetFullPath(TargetProfilePath);
-
-                CSVPath = command.TryGetArgumentValue("csv", "c", out string csv) ? csv : null;
-                bool displayOutput = !command.HasArgument("nodisplay", "nd");
-
-                List<string> targetProfiles = command.GetProfilePaths(TargetProfilePath).ToList();
-                targetProfiles.Remove(sourcePath);
-                if (targetProfiles.Count == 0)
-                {
-                    throw new ArgumentException("No target profiles available (source and target cannot be the same).");
-                }
-
                 Output.WriteLine($"Using source profile @Blue{{{SourceProfilePath}}}");
-                Output.WriteLine($"Using target profile folder @Blue{{{TargetProfilePath}}}");
+                Output.WriteLine($"Using target profile {(TargetProfilePath.EndsWith(".xml") ? "path" : "folder")} @Blue{{{TargetProfilePath}}}");
+                if (DeviceId is not null) Output.WriteLine($"Comparing device @Red{{{DeviceId}}}");
+                if (Filter is not null) Output.WriteLine($"Showing only results of type @Yellow{{{Filter.ToString().ToLower()}}}");
 
-                Profile source = new Profile(SourceProfilePath, "nicknames.txt");
+                Profile source = new Profile(SourceProfilePath, Command.DEFAULT_NICKNAMES_FILENAME);
                 List<ProfileComparison> comparisons = new();
 
-                foreach (string targetProfile in targetProfiles)
+                IEnumerable<Profile> targetProfiles = Profile.GetProfiles(TargetProfilePath);
+                foreach (Profile target in targetProfiles)
                 {
-                    Profile target = new Profile(targetProfile, "nicknames.txt");
-                    comparisons.Add(new ProfileComparison(source, target));
+                    comparisons.Add(new ProfileComparison(source, target, DeviceId));
                 }
                 
-                if (displayOutput)
+                if (DisplayOutput)
                 {
                     DisplayComparisons(comparisons);
                 }
@@ -79,15 +73,6 @@
             }
         }
 
-        private void DisplayHelp()
-        {
-            Output.WriteLine("@Green{Usage: ProfileManager --operation|-o:compare --source|-s:<source> [--target|-t:<target>] [--csv|-c:<path>] [-nodisplay]}");
-            Output.WriteLine("  --source|-s:<source>  The profile to compare with.");
-            Output.WriteLine("  --target|-t:<target>  The profile to compare against (or all if not specified).");
-            Output.WriteLine("  --csv|-c:<path>       The path to write the CSV report to (if none, no CVS report is written).");
-            Output.WriteLine("  --nodisplay|-nd       Suppress output to the console.");
-        }
-
         private void DisplayComparisons(IEnumerable<ProfileComparison> comparisons)
         {
             Output.NewLine();
@@ -95,16 +80,19 @@
             int maxLeft, maxRight;
             List<(string Left, string Right, string Comparison)> output = new();
 
-            foreach(ProfileComparison comparison in comparisons)
+            foreach (ProfileComparison comparison in comparisons)
             {
-                foreach(DeviceComparison deviceComparison in comparison.DeviceComparisons)
+                foreach (DeviceComparison deviceComparison in comparison.DeviceComparisons)
                 {
-                    string left = $"{comparison.SourceProfile.Name}>{deviceComparison.DeviceID}";
-                    string right = $"{comparison.TargetProfile.Name}>{deviceComparison.DeviceID}";
+                    string left = $"@Yellow{{{comparison.SourceProfile.Name}}} > {deviceComparison.DeviceID}";
+                    string right = $"@Yellow{{{comparison.TargetProfile.Name}}} > {deviceComparison.DeviceID}";
                     string comparisonText = deviceComparison.DoesntExist ? "@Blue{not present}" : deviceComparison.IsEqual ? "@Green{same}" : "@Red{different}";
-                    output.Add((left, right, comparisonText));
+                    if (Filter is null || deviceComparison.Result == Filter.Value)
+                    {
+                        output.Add((left, right, comparisonText));
+                    }
                 }
-            }
+            }           
 
             maxLeft = output.Max(x => x.Left.Length);
             maxRight = output.Max(x => x.Right.Length);
@@ -127,15 +115,24 @@
                 foreach(DeviceComparison deviceComparison in comparison.DeviceComparisons)
                 {
                     string status = deviceComparison.DoesntExist ? "not present" : deviceComparison.IsEqual ? "same" : "different";
-                    csvData.Add($"{comparison.SourceProfile.Name},{comparison.TargetProfile.Name},{deviceComparison.DeviceID},{status}");
+                    if (Filter is null || deviceComparison.Result == Filter.Value)
+                    {
+                        csvData.Add($"{comparison.SourceProfile.Name},{comparison.TargetProfile.Name},{deviceComparison.DeviceID},{status}");
+                    }
                 }
             }
 
             File.WriteAllLines(csvPath, csvData);
         }
 
-        public Comparer(IOutput output)
+        public ProfileComparer(string sourcePath, string targetPath, string device, string filter, string csvPath, bool display, IOutput output)
         {
+            SourceProfilePath = sourcePath;
+            TargetProfilePath = targetPath;
+            DeviceId = device;
+            Filter = filter is not null ? Enum.Parse<ComparisonResult>(filter, true) : null;
+            CSVPath = csvPath;
+            DisplayOutput = display;
             Output = output;
         }
     }

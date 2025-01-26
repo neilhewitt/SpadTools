@@ -1,10 +1,12 @@
-﻿namespace ProfileManager
+﻿namespace ProfileManager.Output
 {
     public class CSVOutput : IOutput
     {
         private string _csvPath;
         private string _csvLine;
         private List<string> _csvData = new();
+
+        public string WaitPrompt => "";
 
         public Action<string> Write => (message) => WriteToCSV(message, false);
 

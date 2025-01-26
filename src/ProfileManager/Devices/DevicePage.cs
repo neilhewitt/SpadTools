@@ -1,6 +1,7 @@
-﻿using System.Xml;
+﻿using ProfileManager.Profiles;
+using System.Xml;
 
-namespace ProfileManager
+namespace ProfileManager.Devices
 {
     public class DevicePage
     {

@@ -1,8 +1,9 @@
 ﻿using System.Xml;
 using System.Linq;
 using System.Net;
+using ProfileManager.Profiles;
 
-namespace ProfileManager
+namespace ProfileManager.Devices
 {
     public class Device
     {
@@ -13,6 +14,7 @@ namespace ProfileManager
 
         public string VendorID { get; set; }
         public string ProductID { get; set; }
+        public string DevicePath { get; set; }
         public int DeviceIndex { get; set; }
         public int Version { get; set; }
         public string Nickname { get; set; }
@@ -63,12 +65,29 @@ namespace ProfileManager
             return Nickname ?? $"{VendorID}:{ProductID}:{DeviceIndex}:{Version}";
         }
 
+        public string ToString(bool includeNickname)
+        {
+            return includeNickname ? ToString() : $"({VendorID}:{ProductID}:{DeviceIndex}:{Version})";
+        }
+
+        public override bool Equals(object obj)
+        {
+            Device other = obj as Device;
+            return other != null && VendorID == other.VendorID && ProductID == other.ProductID && DeviceIndex == other.DeviceIndex;
+        }
+
+        public override int GetHashCode()
+        {
+            return new { VendorID, ProductID, DeviceIndex }.GetHashCode();
+        }
+
         public Device(XmlNode deviceNode, Profile profile)
         {
             _profile = profile;
             _deviceNode = deviceNode;
             VendorID = deviceNode.Attributes["VendorID"].Value;
             ProductID = deviceNode.Attributes["ProductID"].Value;
+            DevicePath = deviceNode.Attributes["DevicePath"].Value;
             DeviceIndex = int.Parse(deviceNode.Attributes["DeviceIndex"].Value);
             Version = int.Parse(deviceNode.Attributes["Version"].Value);
             
