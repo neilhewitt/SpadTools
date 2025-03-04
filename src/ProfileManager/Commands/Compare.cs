@@ -5,7 +5,7 @@ namespace ProfileManager.Commands
 {
     public class Compare : Command
     {
-        public override bool TakesArguments => true;
+        public override bool RequiresArguments => true;
 
         public override string UsageText =>
 @"@Green{Usage: ProfileManager compare <source> [<target>] [--device|-d:<device>] [--filter|-f:<same|different|notpresent>] [--csv|-c:<path>] [-nodisplay]}
@@ -42,14 +42,42 @@ You can filter to see just one of these statuses by using the --filter option.
 If you specify the --csv flag with a valid output path, the results of the comparison will be written to a CSV file
 in the same folder as the profiles.
 
-If you specify the --nodisplay flag then the comparison results will not be written to the output, but the CSV (if requested)
-will still be written.";
+If you specify the --nodisplay flag then the comparison results will not be written to the output, but the CSV 
+(if requested) will still be written.";
 
         public override void Execute()
         {
-            Argument argument = _arguments.FirstOrDefault();
-            string source = GetFullPath(argument?.Value, out bool isSourceAFolder); 
-            string target = GetFullPath(argument.Next?.Value, out bool isTargetAFolder) ?? "*"; // wildcard if not specified
+            if (Arguments[0] is null)
+            {
+                _output.WriteLine("@Red{Source profile is required.}");
+                return;
+            }
+            else
+            {
+                if (Arguments[1] is null)
+                {
+                    // assume we're comparing against all profiles in the current folder
+                    Arguments.Add(Directory.GetCurrentDirectory());
+                }
+            }
+
+            string source = GetFullPath(Arguments[0], out bool isSourceAFolder, out string originalSource, out bool sourcePathIsValid); 
+            string target = GetFullPath(Arguments[1], out bool isTargetAFolder, out string originalTarget, out bool targetPathIsValid);
+
+            if (!sourcePathIsValid || !targetPathIsValid)
+            {
+                if (!sourcePathIsValid)
+                {
+                    _output.WriteLine($"@Red{{Source profile}} {originalSource} @Red{{not found.}}");
+                }
+
+                if (!targetPathIsValid)
+                {
+                    _output.WriteLine($"@Red{{Target profile}} {originalTarget} @Red{{not found.}}");
+                }
+                
+                return;
+            }
 
             if (isSourceAFolder)
             {
@@ -57,15 +85,10 @@ will still be written.";
                 return;
             }
 
-            if (isTargetAFolder)
-            {
-                target = target.TrimEnd('\\') + "\\*";
-            }
-
-            string device = GetArgument("device", "d")?.Value;
-            string filter = GetArgument("filter", "f")?.Value;
-            string csvPath = GetArgument("csv", "c")?.Value;
-            bool noDisplay = GetArgument("nodisplay", "nd") != null;
+            string deviceId = Arguments[("device", "d")]?.Value;
+            string filter = Arguments[("filter", "f")]?.Value;
+            string csvPath = Arguments[("csv", "c")]?.Value;
+            bool noDisplay = Arguments[("nodisplay", "nd")] != null;
 
             // check params
             if (string.IsNullOrWhiteSpace(source))
@@ -74,11 +97,10 @@ will still be written.";
                 return;
             }
 
-            ProfileComparer comparer = new ProfileComparer(source, target, device, filter, csvPath, !noDisplay, _output);
-            comparer.Compare(this);
+            ProfileComparer.Compare(source, target, deviceId, filter, csvPath, noDisplay, _output);
         }
 
-        public Compare(IEnumerable<Argument> arguments, IOutput output) : base(arguments, output)
+        public Compare(ArgumentCollection arguments, IOutput output) : base(arguments, output)
         {
         }
     }

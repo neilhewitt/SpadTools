@@ -5,18 +5,18 @@ namespace ProfileManager.Devices
     public class DeviceComparison
     {
         public string DeviceID { get; set; }
-        public Device OriginalDevice { get; set; }
-        public Device CompareDevice { get; set; }
+        public Device Source { get; set; }
+        public Device Target { get; set; }
 
-        public bool IsEqual => OriginalDevice?.Xml == CompareDevice?.Xml;
-        public bool DoesntExist => CompareDevice == null;
+        public bool IsEqual => Source?.Xml == Target?.Xml;
+        public bool DoesntExist => Target == null;
         public ComparisonResult Result => IsEqual ? ComparisonResult.Same : DoesntExist ? ComparisonResult.NotPresent : ComparisonResult.Different;
 
-        public DeviceComparison(Device originalDevice, Device compareDevice)
+        public DeviceComparison(Device source, Device target)
         {
-            OriginalDevice = originalDevice;
-            CompareDevice = compareDevice;
-            DeviceID = OriginalDevice?.ToString();
+            Source = source;
+            Target = target;
+            DeviceID = Source?.ToString();
         }
     }
 }

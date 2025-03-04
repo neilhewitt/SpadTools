@@ -9,20 +9,11 @@ namespace ProfileManager.Profiles
 
         public IEnumerable<DeviceComparison> DeviceComparisons { get; set; }
 
-        public ProfileComparison(Profile sourceProfile, Profile targetProfile, string deviceId)
+        public ProfileComparison(Profile sourceProfile, Profile targetProfile, IEnumerable<DeviceComparison> deviceComparisons)
         {
             SourceProfile = sourceProfile;
             TargetProfile = targetProfile;
-
-            if (deviceId is null)
-            {
-                DeviceComparisons = sourceProfile.CompareWith(targetProfile);
-            }
-            else
-            {
-                Device device = sourceProfile.GetDevice(deviceId);
-                DeviceComparisons = sourceProfile.CompareWith(targetProfile, device);
-            }
+            DeviceComparisons = deviceComparisons;
         }
     }
 }

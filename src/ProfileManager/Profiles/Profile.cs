@@ -6,28 +6,44 @@ namespace ProfileManager.Profiles
 {
     public class Profile
     {
-        public static IEnumerable<Profile> GetProfiles(string path)
+        public static IEnumerable<Profile> GetProfiles(string pathOrProfile, string sourceProfile = null)
         {
-            if (path == "*")
+            pathOrProfile = pathOrProfile.ToLower();
+            sourceProfile = sourceProfile?.EnsureXmlExtension().ToLower();
+
+            // is this a single profile XML file?
+            if ((pathOrProfile.EndsWith(".xml") && File.Exists(pathOrProfile)) || (File.Exists(pathOrProfile + ".xml")))
             {
-                path = Directory.GetCurrentDirectory();
+                yield return new Profile(pathOrProfile, Profile.DEFAULT_NICKNAMES_FILENAME);
+                yield break;
             }
 
-            if (!Directory.Exists(path))
+            if (pathOrProfile is null)
             {
-                throw new FileNotFoundException($"Directory not found: {path}");
+                Console.WriteLine("FRAK: No path or profile specified.");
+                pathOrProfile = Directory.GetCurrentDirectory();
             }
 
-            foreach (var profilePath in Directory.GetFiles(path).Where(x => x.EndsWith(".xml")))
+            if (!Directory.Exists(pathOrProfile))
+            {
+                throw new FileNotFoundException($"Directory not found: {pathOrProfile}");
+            }
+
+            foreach (var profilePath in Directory.GetFiles(pathOrProfile).Select(x => x.ToLower()).Where(x => x.EndsWith(".xml")))
             {
                 Profile profile = null;
                 try
                 {
-                    profile = new(profilePath, Profile.DEFAULT_NICKNAMES_FILENAME);
+                    // don't want to include the source profile
+                    if (profilePath != sourceProfile)
+                    {
+                        profile = new(profilePath, Profile.DEFAULT_NICKNAMES_FILENAME);
+                    }
                 }
                 catch
                 {
-                    // do nothing, we'll just skip this XML file
+                    // not valid for whatever reason
+                    // do nothing, we'll just skip this file
                 }
 
                 if (profile is not null)
@@ -35,6 +51,12 @@ namespace ProfileManager.Profiles
                     yield return profile;
                 }
             }
+        }
+
+        public static Profile GetProfile(string profileName)
+        {
+            profileName = profileName.EnsureXmlExtension().ToLower();
+            return new Profile(profileName, Profile.DEFAULT_NICKNAMES_FILENAME);
         }
 
         public static string DEFAULT_NICKNAMES_FILENAME = "nicknames.txt";
@@ -50,7 +72,7 @@ namespace ProfileManager.Profiles
         public string Name => System.IO.Path.GetFileNameWithoutExtension(_path);
 
         public IEnumerable<Device> Devices => _devices;
-        public IEnumerable<CustomClientEvent > CustomClientEvents => _customClientEvents;
+        public IEnumerable<CustomClientEvent> CustomClientEvents => _customClientEvents;
 
         public XmlDocument Document => _profile;
 
@@ -59,41 +81,34 @@ namespace ProfileManager.Profiles
             Device device = Devices.FirstOrDefault(d => d.Nickname is not null && d.Nickname.ToLower() == id.ToLower());
             if (device is null)
             {
-                string[] idParts = id.Split(',', StringSplitOptions.RemoveEmptyEntries);
-                if (idParts.Length == 4)
+                try
                 {
-                    string vendorID = idParts[0];
-                    string productID = idParts[1];
-                    int deviceIndex = int.Parse(idParts[2]);
-                    int version = int.Parse(idParts[3]);
-                    device = Devices.SingleOrDefault(d => d.VendorID == vendorID && d.ProductID == productID && d.DeviceIndex == deviceIndex && d.Version == version);
-                    return device;
+                    string[] idParts = id.Split(',', StringSplitOptions.RemoveEmptyEntries);
+                    if (idParts.Length == 4)
+                    {
+                        string vendorID = idParts[0];
+                        string productID = idParts[1];
+                        int deviceIndex = int.Parse(idParts[2]);
+                        int version = int.Parse(idParts[3]);
+                        device = Devices.SingleOrDefault(d => d.VendorID == vendorID && d.ProductID == productID && d.DeviceIndex == deviceIndex && d.Version == version);
+                        return device;
+                    }
+                    else
+                    {
+                        throw new FormatException("Invalid nickname, or device ID format: must be 'VendorID,ProductID,DeviceIndex,Version' and VendorId and ProductID must be in hex format '0xXXXX'.");
+                    }
                 }
-                else
+                catch (FormatException)
                 {
-                    throw new FormatException("Invalid device ID format. Must be '{VendorID},{ProductID},{DeviceIndex},{Version}' and VendorId and ProductID must be in hex format '0xXXXX'.");
+                    throw;
+                }
+                catch
+                {
+                    throw;
                 }
             }
 
-            return null;
-        }
-
-        public IEnumerable<DeviceComparison> CompareWith(Profile profile)
-        {
-            foreach(Device device in _devices)
-            {
-                Device otherDevice = profile.Devices.FirstOrDefault(d => d.VendorID == device.VendorID && d.ProductID == device.ProductID && d.DeviceIndex == device.DeviceIndex);
-                DeviceComparison comparison = new DeviceComparison(device, otherDevice);
-
-                yield return comparison;
-            }
-        }
-
-        public IEnumerable<DeviceComparison> CompareWith(Profile profile, Device device)
-        {
-            Device otherDevice = profile.Devices.FirstOrDefault(d => d.VendorID == device.VendorID && d.ProductID == device.ProductID && d.DeviceIndex == device.DeviceIndex);
-            DeviceComparison comparison = new DeviceComparison(device, otherDevice);
-            return new List<DeviceComparison> { comparison };
+            return device;
         }
 
         public bool ReplaceDevice(Device replacement)
@@ -192,7 +207,7 @@ namespace ProfileManager.Profiles
             }
         }
 
-        public Profile(string profilePath, string nicknamesFile)
+        private Profile(string profilePath, string nicknamesFile)
         {
             if (nicknamesFile != null)
             {

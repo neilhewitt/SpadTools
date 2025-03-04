@@ -6,7 +6,14 @@ namespace ProfileManager.Profiles
 {
     public class ProfileComparer
     {
-        public IOutput Output { get; init; }
+        public static void Compare(string sourcePath, string targetPath, string deviceId, string filter, string csvPath, bool noDisplay, IOutput output)
+        {
+            ProfileComparer comparer = new(sourcePath, targetPath, deviceId, filter, csvPath, noDisplay, output);
+            comparer.Compare();
+        }
+
+        private IOutput _output;
+
         public string SourceProfilePath { get; private set; }
         public string TargetProfilePath { get; private set; }
         public string CSVPath { get; private set; }
@@ -14,41 +21,35 @@ namespace ProfileManager.Profiles
         public ComparisonResult? Filter { get; private set; }
         public bool DisplayOutput { get; private set; }
 
-        public void Compare(Command command)
+        public void Compare()
         {
             try
             {
-                /* params
-                 *              
-                 * source (required) - the profile to compare with
-                 * target (optional) - the profile to compare against (or all if not specified)
-                 * csv (optional) - the path to write the CSV output to
-                 * nodisplay (optional) - suppress output to the console
-                 * 
-                 */
+                IEnumerable<Profile> targetProfiles = Profile.GetProfiles(TargetProfilePath, SourceProfilePath);
 
-                TargetProfilePath = Command.GetFullPath(TargetProfilePath, out bool isFolder);
-                List<string> targetProfilePaths = Command.GetProfilePaths(TargetProfilePath).ToList();
-                
-                targetProfilePaths.Remove(SourceProfilePath);
-                if (targetProfilePaths.Count == 0)
+                if (targetProfiles.Count() == 0)
                 {
-                    Output.WriteLine($"No target profiles available in @Blue{{{TargetProfilePath}}}.");
+                    _output.WriteLine($"No target profiles available in @Blue{{{TargetProfilePath}}}.");
                     return;
                 }
 
-                Output.WriteLine($"Using source profile @Blue{{{SourceProfilePath}}}");
-                Output.WriteLine($"Using target profile {(TargetProfilePath.EndsWith(".xml") ? "path" : "folder")} @Blue{{{TargetProfilePath}}}");
-                if (DeviceId is not null) Output.WriteLine($"Comparing device @Red{{{DeviceId}}}");
-                if (Filter is not null) Output.WriteLine($"Showing only results of type @Yellow{{{Filter.ToString().ToLower()}}}");
+                _output.WriteLine($"Using source profile @Blue{{{SourceProfilePath}}}");
+                _output.WriteLine($"Using target profile {(TargetProfilePath.EndsWith(".xml") ? "" : "folder")} @Blue{{{TargetProfilePath}}}");
+                if (DeviceId is not null) _output.WriteLine($"Comparing device @Red{{{DeviceId}}}");
+                if (Filter is not null) _output.WriteLine($"Showing only results of type @Yellow{{{Filter.ToString().ToLower()}}}");
 
-                Profile source = new Profile(SourceProfilePath, Command.DEFAULT_NICKNAMES_FILENAME);
+                Profile sourceProfile = Profile.GetProfile(SourceProfilePath);
                 List<ProfileComparison> comparisons = new();
 
-                IEnumerable<Profile> targetProfiles = Profile.GetProfiles(TargetProfilePath);
-                foreach (Profile target in targetProfiles)
+                foreach (Profile targetProfile in targetProfiles)
                 {
-                    comparisons.Add(new ProfileComparison(source, target, DeviceId));
+                    comparisons.Add(DoComparison(sourceProfile, targetProfile));
+                }
+
+                if (comparisons.Count() == 0)
+                {
+                    _output.WriteLine("No comparisons. Device not found in any target profile, or no target profiles.");
+                    return;
                 }
                 
                 if (DisplayOutput)
@@ -61,21 +62,45 @@ namespace ProfileManager.Profiles
                     WriteCSV(comparisons, CSVPath);
                 }
 
-                Output.WriteLine("Comparison complete.");
+                _output.WriteLine("Comparison complete.");
                 if (CSVPath is not null)
                 {
-                    Output.WriteLine($"CSV written to @Blue{{{CSVPath}}}.");
+                    _output.WriteLine($"CSV written to @Blue{{{CSVPath}}}.");
                 }
             }
             catch (Exception ex)
             {
-                Output.WriteLine($"@Red{{{ex.Message}}}");
+                _output.WriteLine($"@Red{{{ex.Message}}}");
             }
+        }
+
+        private ProfileComparison DoComparison(Profile source, Profile target)
+        {
+            List<DeviceComparison> deviceComparisons = new();
+            foreach (Device sourceDevice in source.Devices)
+            {
+                if (DeviceId is null || sourceDevice.ID == DeviceId || sourceDevice.Nickname == DeviceId)
+                {
+                    Device targetDevice = target.Devices.FirstOrDefault(d => 
+                        d.VendorID == sourceDevice.VendorID && 
+                        d.ProductID == sourceDevice.ProductID && 
+                        d.DeviceIndex == sourceDevice.DeviceIndex && 
+                        d.Version == sourceDevice.Version);
+
+                    if (targetDevice is not null)
+                    {
+                        DeviceComparison comparison = new DeviceComparison(sourceDevice, targetDevice);
+                        deviceComparisons.Add(comparison);
+                    }
+                }
+            }
+
+            return new ProfileComparison(source, target, deviceComparisons);
         }
 
         private void DisplayComparisons(IEnumerable<ProfileComparison> comparisons)
         {
-            Output.NewLine();
+            _output.NewLine();
 
             int maxLeft, maxRight;
             List<(string Left, string Right, string Comparison)> output = new();
@@ -99,11 +124,11 @@ namespace ProfileManager.Profiles
 
             foreach (var outputItem in output)
             {
-                Output.Write($"{outputItem.Left.PadRight(maxLeft)} -> {outputItem.Right.PadRight(maxRight)} ");
-                Output.WriteLine(outputItem.Comparison);
+                _output.Write($"{outputItem.Left.PadRight(maxLeft)} -> {outputItem.Right.PadRight(maxRight)} ");
+                _output.WriteLine(outputItem.Comparison);
             }
 
-            Output.NewLine();
+            _output.NewLine();
         }
 
         private void WriteCSV(IEnumerable<ProfileComparison> comparisons, string csvPath)
@@ -125,15 +150,15 @@ namespace ProfileManager.Profiles
             File.WriteAllLines(csvPath, csvData);
         }
 
-        public ProfileComparer(string sourcePath, string targetPath, string device, string filter, string csvPath, bool display, IOutput output)
+        private ProfileComparer(string sourcePath, string targetPath, string deviceId, string filter, string csvPath, bool noDisplay, IOutput output)
         {
             SourceProfilePath = sourcePath;
-            TargetProfilePath = targetPath;
-            DeviceId = device;
+            TargetProfilePath = targetPath ?? Directory.GetCurrentDirectory();
+            DeviceId = deviceId;
             Filter = filter is not null ? Enum.Parse<ComparisonResult>(filter, true) : null;
             CSVPath = csvPath;
-            DisplayOutput = display;
-            Output = output;
+            DisplayOutput = !noDisplay;
+            _output = output;
         }
     }
 }

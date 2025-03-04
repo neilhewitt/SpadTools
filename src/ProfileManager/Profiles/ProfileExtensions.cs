@@ -22,5 +22,11 @@ namespace ProfileManager.Profiles
             string xpath = $".//ns:{name}";
             return node.SelectNodes(xpath, Profile.NS).Cast<XmlNode>().Select(x => builder(x));
         }
+
+        public static string EnsureXmlExtension(this string input)
+        {
+            if (input.EndsWith(".xml")) return input;
+            return $"{input}.xml";
+        }
     }
 }

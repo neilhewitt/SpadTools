@@ -18,6 +18,7 @@ namespace ProfileManager.Devices
         public int DeviceIndex { get; set; }
         public int Version { get; set; }
         public string Nickname { get; set; }
+        public string ID => $"{VendorID},{ProductID},{DeviceIndex},{Version}";
 
         public string Xml => _deviceNode.OuterXml;
         public string InnerXml => _deviceNode.InnerXml;
@@ -62,12 +63,12 @@ namespace ProfileManager.Devices
 
         public override string ToString()
         {
-            return Nickname ?? $"{VendorID}:{ProductID}:{DeviceIndex}:{Version}";
+            return Nickname ?? ID;
         }
 
         public string ToString(bool includeNickname)
         {
-            return includeNickname ? ToString() : $"({VendorID}:{ProductID}:{DeviceIndex}:{Version})";
+            return includeNickname ? ToString() : ID;
         }
 
         public override bool Equals(object obj)

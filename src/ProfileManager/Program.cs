@@ -7,7 +7,7 @@ namespace ProfileManager
     {
         private static void Main(string[] args)
         {
-            if (args.Length == 0)
+            if (args.Length == 0 || args[0] == "debug")
             {
                 Console.WriteLine("Spad.neXt Profile Manager (C)2024 Neil Hewitt");
                 Console.WriteLine("Type commands below, 'quit' to exit.");

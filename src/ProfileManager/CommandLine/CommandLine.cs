@@ -7,11 +7,9 @@ namespace ProfileManager
     public class CommandLine
     {
         private IOutput _output;
-        private Dictionary<string, Argument> _arguments;
 
         private string _helpText =
 @"@Green{Usage: ProfileManager [debug] <command-name> [--nobackups|-nb]}
-    debug           Pause for ENTER key at start to allow debugger attachment
     <command-name>  The operation to perform.
     --nobackups|-nb Don't make backups before changing files.
 
@@ -22,53 +20,28 @@ Available commands are:
     delete
     help
 ";
-
-        public bool Debug { get; private set; } = false; // default
         public bool MakeBackups { get; private set; } = true; // default
-        public IEnumerable<Argument> Arguments => _arguments.Values;
-
-        public bool TryGetArgument(string argumentName, string shortArgumentName, out string value)
-        {
-            if (_arguments.ContainsKey(argumentName.ToLower()))
-            {
-                value = _arguments[argumentName.ToLower()].Value;
-                return true;
-            }
-            else if (_arguments.ContainsKey(shortArgumentName.ToLower()))
-            {
-                value = _arguments[shortArgumentName.ToLower()].Value;
-                return true;
-            }
-
-            value = null;
-            return false;
-        }
+        public ArgumentCollection Arguments { get; init; }
 
         public void ParseAndRunCommand()
         {            
-            if (Debug)
-            {
-                _output.WriteLine($"Debug mode: Attach to ProfileManager.exe process in the debugger, then {_output.WaitPrompt} to continue");
-                _output.WaitForUser();
-            }
-
             Command command = MakeCommand();
             if (command is not null)
             {
-                if (!command.TakesArguments || command.HasArguments)
+                if (!command.RequiresArguments || command.HasArguments)
                 {
                     command.Execute();
                 }
             }
             else
             {
-                ShowHelp();
+                _output.WriteLine(_helpText);
             }
         }
 
         private Command MakeCommand()
         {
-            string commandName = Arguments?.FirstOrDefault()?.Value.ToLower() ?? null;
+            string commandName = Arguments.FirstOrDefault()?.Value.ToLower() ?? null;
             return (commandName) switch
             {
                 "list" => new List(Arguments, _output),
@@ -80,11 +53,6 @@ Available commands are:
             };
         }
         
-        private void ShowHelp()
-        {
-            _output.WriteLine(_helpText);
-        }
-
         public CommandLine(string commandLine, IOutput output)
             : this(commandLine.Split(' '), output)
         {
@@ -92,39 +60,42 @@ Available commands are:
 
         public CommandLine(string[] args, IOutput output)
         {
-            // handle global arguments (remove from list once parsed)
-            Debug = args[0].ToLower() == "debug";
-            if (Debug) args = args.Skip(1).ToArray();
-
-            MakeBackups = args.Contains("--nobackups") || args.Contains("-nb");
-            if (MakeBackups) args = args.Where(x => x != "--nobackups" && x != "-nb").ToArray();
-
-            // parse the rest of the args list into a collection of Arguments to form the command line
-            if (args.Length > 0 && args[0] != "")
+            if (args.Length > 0 && !String.IsNullOrWhiteSpace(args[0]))
             {
-                List<Argument> arguments = new();
-                Argument current = null, previous = null;
+                // handle global arguments (we'll remove them from the list once parsed)
+                MakeBackups = args.Contains("--nobackups") || args.Contains("-nb");
+                if (MakeBackups) args = args.Where(x => x != "--nobackups" && x != "-nb").ToArray();
+
+                // parse the rest of the args list into a collection of Arguments
+                ArgumentCollection arguments = new();
 
                 foreach (string arg in args)
                 {
-                    // have to handle args that are file paths
-                    string[] argumentParts = arg[1..3] == ":\\" ? new string[] { arg } : arg.TrimStart('-').Split(':', StringSplitOptions.RemoveEmptyEntries);
-
-                    previous = current;
-                    current = new Argument(argumentParts[0], argumentParts.Length > 1 ? argumentParts[1] : null) { Previous = previous };
-                    if (previous is not null)
+                    if (!String.IsNullOrWhiteSpace(arg))
                     {
-                        previous.Next = current;
+                        bool hasPathValueOnly = (arg.Length > 2 && arg[1..3] == ":\\"); // ie c:\path\to\file
+                        bool hasPathValueAndName = arg.Count(c => c == ':') > 1 && !arg.Contains(":\\"); // ie --path:c:\path\to\file
+                        bool hasName = !hasPathValueOnly && arg.Contains(":");
+
+                        string[] argumentParts;
+                        if (hasPathValueOnly || !hasName)
+                        {
+                            argumentParts = new string[] { arg };
+                        }
+                        else
+                        {
+                            argumentParts = arg.TrimStart('-').Split(':', StringSplitOptions.RemoveEmptyEntries);
+                        }
+
+                        arguments.Add(argumentParts[0], argumentParts.Length > 1 ? argumentParts[1] : null);
                     }
-                    
-                    arguments.Add(current);
                 }
 
-                _arguments = new(arguments.ToDictionary(arguments => arguments.Name.ToLower()));
+                Arguments = arguments;
             }
             else
-            {
-                _arguments = new(); // empty
+            { 
+                Arguments = new ArgumentCollection(); 
             }
 
             _output = output;

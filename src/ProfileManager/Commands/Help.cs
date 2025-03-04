@@ -4,7 +4,7 @@ namespace ProfileManager.Commands
 {
     public class Help : Command
     {
-        public override bool TakesArguments => true;
+        public override bool RequiresArguments => true;
         public override string UsageText =>
 @"@Green{Usage: ProfileManager help [command]}
     [command]  Show help for a specific command.
@@ -15,11 +15,12 @@ Available commands are:
     replace
     delete
 ";
-        public void ShowHelpFor<T>() where T : Command
+        public void ShowHelpFor<T>(params object[] extraParameters) where T : Command
         {
-            T command = (T)Activator.CreateInstance(typeof(T), null, new ConsoleOutput());
-            command.ShowUsage();
-            _output.NewLine();
+            object[] parameters = [null, new ConsoleOutput()];
+            parameters = parameters.Concat(extraParameters).ToArray();
+
+            T command = (T)Activator.CreateInstance(typeof(T), parameters);
             command.ShowDescription();
         }
 
@@ -28,7 +29,7 @@ Available commands are:
             if (HasArguments)
             {
                 // crack arguments and find appropriate help page
-                string commandName = _arguments.First().Value;
+                string commandName = Arguments.First().Value;
                 switch (commandName)
                 {
                     case "list":
@@ -38,13 +39,16 @@ Available commands are:
                         ShowHelpFor<Compare>();
                         break;
                     case "replace":
-                        ShowHelpFor<Replace>();
+                        ShowHelpFor<Replace>(false);
+                        break;
+                    case "delete":
+                        ShowHelpFor<Delete>(false);
                         break;
                 }
             }
         }
 
-        public Help(IEnumerable<Argument> arguments, IOutput output) : base(arguments, output)
+        public Help(ArgumentCollection arguments, IOutput output) : base(arguments, output)
         {
         }
     }

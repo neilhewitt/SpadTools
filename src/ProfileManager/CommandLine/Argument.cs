@@ -6,26 +6,9 @@ namespace ProfileManager
     {
         public string Name { get; init; }
         public string Value { get; init; }
-        public Argument Next { get; internal set; }
-        public Argument Previous { get; internal set; }
 
-        public IEnumerable<Argument> FollowingArguments
-        {
-            get
-            {
-                Argument current = Next;
-                while (current != null)
-                {
-                    yield return current;
-                    current = current.Next;
-                }
-            }
-        }
-
-        public bool Matches(string argumentName, string shortArgumentName)
-        {
-            return Name == argumentName || Name == shortArgumentName;
-        }
+        public bool IsValueOnly => Name == Value;
+        public bool IsNamed => Name != Value;
 
         override public string ToString()
         {
@@ -36,6 +19,27 @@ namespace ProfileManager
         {
             Name = name;
             Value = value ?? name;
+        }
+
+        public Argument(string value)
+        {
+            Name = value;
+            Value = value;
+        }
+
+        public static implicit operator string(Argument argument)
+        {
+            return argument?.Value ?? null;
+        }
+
+        public static implicit operator Argument(string value)
+        {
+            return new Argument(value);
+        }
+
+        public static implicit operator Argument((string name, string value) argument)
+        {
+            return new Argument(argument.name, argument.value);
         }
     }
 }
