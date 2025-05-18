@@ -40,7 +40,8 @@ namespace ProfileManager.Commands
 
             if (target is not null)
             {
-                target = GetFullPath(target, out isFolder);
+                target = GetFullPath(target, out isFolder, out pathIsValid);
+                if (!pathIsValid) target = Directory.GetCurrentDirectory();
             }
             
             string device = Arguments[("device", "d")]?.Value;

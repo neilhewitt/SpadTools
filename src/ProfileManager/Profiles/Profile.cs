@@ -6,22 +6,18 @@ namespace ProfileManager.Profiles
 {
     public class Profile
     {
-        public static IEnumerable<Profile> GetProfiles(string pathOrProfile, string sourceProfile = null)
+        public static IEnumerable<Profile> GetProfiles(string pathOrProfile, string excludeProfile = null)
         {
-            pathOrProfile = pathOrProfile.ToLower();
-            sourceProfile = sourceProfile?.EnsureXmlExtension().ToLower();
+            if (pathOrProfile is null) throw new ArgumentNullException(nameof(pathOrProfile), "Path or profile name cannot be null.");
+
+            pathOrProfile = pathOrProfile?.ToLower();
+            excludeProfile = excludeProfile?.EnsureXmlExtension().ToLower();
 
             // is this a single profile XML file?
             if ((pathOrProfile.EndsWith(".xml") && File.Exists(pathOrProfile)) || (File.Exists(pathOrProfile + ".xml")))
             {
                 yield return new Profile(pathOrProfile, Profile.DEFAULT_NICKNAMES_FILENAME);
                 yield break;
-            }
-
-            if (pathOrProfile is null)
-            {
-                Console.WriteLine("FRAK: No path or profile specified.");
-                pathOrProfile = Directory.GetCurrentDirectory();
             }
 
             if (!Directory.Exists(pathOrProfile))
@@ -35,7 +31,7 @@ namespace ProfileManager.Profiles
                 try
                 {
                     // don't want to include the source profile
-                    if (profilePath != sourceProfile)
+                    if (profilePath != excludeProfile)
                     {
                         profile = new(profilePath, Profile.DEFAULT_NICKNAMES_FILENAME);
                     }
