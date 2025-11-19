@@ -12,9 +12,10 @@ namespace ProfileManager.Commands
     <source>                The profile to compare from.
     <target>                The profile to compare against (or all if not specified).
     --device|-d:<device>    The device to compare (if not specified, all devices are compared).
-    --filter|-f:<filter>    Show only results of the specified type.
+    --filter|-f:<filter>    Show only results of the specified type (same|different|notpresent).
     --csv|-c:<path>         The path to write the CSV report to (if none, no CVS report is written).
-    --nodisplay|-nd         Suppress output to the console.";
+    --nodisplay|-nd         Suppress output to the console.
+    --verbose|-v            Show event-level comparisons";
 
         public override string DescriptionText =>
 @"@Yellow{Compares the specific content of one or more devices across two or more profiles.}
@@ -43,7 +44,9 @@ If you specify the --csv flag with a valid output path, the results of the compa
 in the same folder as the profiles.
 
 If you specify the --nodisplay flag then the comparison results will not be written to the output, but the CSV 
-(if requested) will still be written.";
+(if requested) will still be written.
+
+If you specify the --verbose flag then the comparison results will be displayed at the individual bound event level.";
 
         public override void Execute()
         {
@@ -58,6 +61,10 @@ If you specify the --nodisplay flag then the comparison results will not be writ
                 {
                     // assume we're comparing against all profiles in the current folder
                     Arguments.Add(Directory.GetCurrentDirectory());
+                }
+                else if (Arguments[1].IsNamed)
+                {
+                    Arguments.Insert(1, Directory.GetCurrentDirectory());
                 }
             }
 
@@ -89,6 +96,7 @@ If you specify the --nodisplay flag then the comparison results will not be writ
             string filter = Arguments[("filter", "f")]?.Value;
             string csvPath = Arguments[("csv", "c")]?.Value;
             bool noDisplay = Arguments[("nodisplay", "nd")] != null;
+            bool verboseOutput = Arguments[("verbose", "v")] != null;
 
             // check params
             if (string.IsNullOrWhiteSpace(source))
@@ -97,7 +105,7 @@ If you specify the --nodisplay flag then the comparison results will not be writ
                 return;
             }
 
-            ProfileComparer.Compare(source, target, deviceId, filter, csvPath, noDisplay, _output);
+            ProfileComparer.Compare(source, target, deviceId, filter, csvPath, noDisplay, verboseOutput, _output);
         }
 
         public Compare(ArgumentCollection arguments, IOutput output) : base(arguments, output)

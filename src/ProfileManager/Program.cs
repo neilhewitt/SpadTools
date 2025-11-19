@@ -19,6 +19,7 @@ namespace ProfileManager
                     if (commandLine.ToLower() == "quit" || commandLine.ToLower() == "q") break;
                     CommandLine command = new CommandLine(commandLine, new ConsoleOutput());
                     command.ParseAndRunCommand();
+                    Console.WriteLine();
                 }
             }
             else

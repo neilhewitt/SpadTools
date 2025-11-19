@@ -1,21 +1,22 @@
 ﻿using ProfileManager.Commands;
 using ProfileManager.Output;
 using ProfileManager.Profiles;
+using System.Diagnostics.Tracing;
 
 namespace ProfileManager.Devices
 {
 
     public class DeviceOperation    
     {
-        public static void Delete(string targetPath, string deviceId, string customEventId, IOutput output, bool makeBackups)
+        public static void Delete(string targetPath, string deviceId, string[] eventIds, IOutput output, bool makeBackups)
         {
-            DeviceOperation deviceOperation = new(DeviceOperationType.Delete, null, targetPath, deviceId, customEventId, output);
+            DeviceOperation deviceOperation = new(DeviceOperationType.Delete, null, targetPath, deviceId, eventIds, output);
             deviceOperation.Execute(makeBackups);
         }
 
-        public static void Replace(string sourceProfileName, string targetPath, string deviceId, string customEventId, IOutput output, bool makeBackups)
+        public static void Replace(string sourceProfileName, string targetPath, string deviceId, string[] eventIds, IOutput output, bool makeBackups)
         {
-            DeviceOperation deviceOperation = new(DeviceOperationType.Replace, sourceProfileName, targetPath, deviceId, customEventId, output);
+            DeviceOperation deviceOperation = new(DeviceOperationType.Replace, sourceProfileName, targetPath, deviceId, eventIds, output);
             deviceOperation.Execute(makeBackups);
         }
 
@@ -26,7 +27,7 @@ namespace ProfileManager.Devices
         public string SourceProfileName { get; private set; }
         public string TargetPath { get; private set; }
         public string DeviceId { get; private set; }
-        public string CustomEventId { get; private set; }
+        public IEnumerable<string> EventIds { get; private set; }
         public DeviceOperationType Type { get; private set; }
 
         private void Execute(bool makeBackups)
@@ -45,68 +46,92 @@ namespace ProfileManager.Devices
                     bool done = false;
                     bool isDelete = Type == DeviceOperationType.Delete;
 
-                    Device device = (_sourceProfile ?? targetProfile).GetDevice(DeviceId);
-                    if (device is null)
+                    Device sourceDevice = _sourceProfile?.GetDevice(DeviceId);
+                    if (!targetProfile.TryGetDevice(DeviceId, out Device targetDevice) && sourceDevice != null)
+                    {
+                        // create a new device if it doesn't exist in the target profile
+                        targetDevice = new Device(sourceDevice.Node, targetProfile);
+
+                        // remove all events except the ones in EventIds unless it's empty
+                        if (EventIds?.Count() > 0)
+                        {
+                            foreach (DevicePage page in targetDevice.Pages)
+                            {
+                                IEnumerable<Event> eventsToRemove = page.Events.Where(e => !EventIds.Contains(e.BoundTo, StringComparer.OrdinalIgnoreCase)).ToList();
+                                foreach (Event eventToRemove in eventsToRemove)
+                                {
+                                    targetDevice.DeleteEvent(eventToRemove.BoundTo);
+                                }
+                            }
+                        }
+                    }
+
+                    if (targetDevice is null)
                     {
                         _output.WriteLine($"Device @Red{{{DeviceId}}} not found in @Green{{{(_sourceProfile ?? targetProfile).Name}}}.");
                         return;
                     }
 
-                    Event sourceEvent = CustomEventId is not null ? device.GetEvent(CustomEventId) : null;
-
-                    string status = isDelete ? "Deleting " : "Replacing ";
-                    if (CustomEventId is not null) status += $"event @Magenta{{{sourceEvent.BoundTo}}} in ";
-                    status += $"device @Red{{{device.Nickname ?? device.ID}}} in @Green{{{targetProfile.Name}}}";
-                    if (!isDelete) status += $" from @Blue{{{_sourceProfile.Name}}}";
-                    status += "... ";
-                    _output.Write(status);
-
                     if (makeBackups) targetProfile.Backup();
 
-                    if (CustomEventId is not null)
+                    if (EventIds?.Count() > 0)
                     {
                         // event mode
-                        Device targetDevice = targetProfile.GetDevice(DeviceId);
-                        if (targetDevice is not null)
+                        foreach(string eventId in EventIds)
                         {
-                            if (sourceEvent is not null)
+                            if (eventId == null)
                             {
-                                if (isDelete)
-                                {
-                                    targetDevice.DeleteEvent(CustomEventId);
-                                }
-                                else
-                                {
-                                    targetDevice.ReplaceEvent(CustomEventId, sourceEvent);
-                                }
+                                _output.WriteLine("@Red{Invalid event ID specified, skipping.}");
+                                continue;
+                            }
 
-                                done = true;
+                            Event sourceEvent = sourceDevice.GetEvent(eventId);
+                            if (sourceEvent == null)
+                            {
+                                _output.WriteLine($"@Red{{Fatal error}}: Event @Magenta{{{eventId}}} not found in @Red{{{sourceDevice.Nickname}}} in @Blue{{{(_sourceProfile ?? targetProfile).Name}}}.");
+                                return;
+                            }
+
+                            bool isAdd = !isDelete && targetDevice.GetEvent(eventId) == null;
+                            string status = isAdd ? "Adding " : isDelete ? "Deleting " : "Replacing ";
+                            status += $"event @Magenta{{{sourceEvent.BoundTo}}} in ";
+                            status += $"device @Red{{{sourceDevice.Nickname ?? sourceDevice.ID}}} in @Green{{{targetProfile.Name}}}";
+                            if (!isDelete) status += $" from @Blue{{{_sourceProfile.Name}}}";
+                            status += "... ";
+                            _output.Write(status);
+
+                            if (isDelete)
+                            {
+                                targetDevice.DeleteEvent(eventId);
                             }
                             else
                             {
-                                _output.NewLine();
-                                _output.WriteLine($"@Red{{Fatal error}}: Event @Magenta{{{CustomEventId}}} not found in @Red{{{device.Nickname}}} in @Blue{{{_sourceProfile.Name}}}.");
-                                return;
+                                targetDevice.ReplaceEvent(eventId, sourceEvent);
                             }
-                        }
-                        else
-                        {
-                            _output.WriteLine($"@@Red{{device not found}}, skipping.");
+
+                            _output.WriteLine("done.");
+                            done = true;
                         }
                     }
                     else
                     {
-                        // whole device mode
+                        string status = isDelete ? "Deleting " : "Replacing ";
+                        status += $"device @Red{{{sourceDevice.Nickname ?? sourceDevice.ID}}} in @Green{{{targetProfile.Name}}}";
+                        if (!isDelete) status += $" from @Blue{{{_sourceProfile.Name}}}";
+                        status += "... ";
+                        _output.Write(status);
+
+                        // device mode
                         if (isDelete)
                         {
-                            if (!targetProfile.DeleteDevice(device))
+                            if (!targetProfile.DeleteDevice(sourceDevice))
                             {
                                 _output.WriteLine("device does not exist in this profile.");
                             }
                         }
                         else
                         {
-                            if (!targetProfile.ReplaceDevice(device))
+                            if (!targetProfile.ReplaceDevice(sourceDevice))
                             {
                                 _output.WriteLine("device does not exist in this profile.");
                             }
@@ -118,7 +143,7 @@ namespace ProfileManager.Devices
                     if (done)
                     {
                         targetProfile.Save();
-                        _output.WriteLine("done.");
+                        _output.WriteLine("Profile saved.");
                     }
                 }
             }
@@ -128,13 +153,13 @@ namespace ProfileManager.Devices
             }
         }
 
-        private DeviceOperation(DeviceOperationType type, string sourceProfileName, string targetPath, string deviceId, string customEventId, IOutput output)
+        private DeviceOperation(DeviceOperationType type, string sourceProfileName, string targetPath, string deviceId, string[] customEventIds, IOutput output)
         {
             Type = type;
             SourceProfileName = sourceProfileName;
             TargetPath = targetPath;
             DeviceId = deviceId;
-            CustomEventId = customEventId;
+            EventIds = customEventIds;
             _output = output;
 
             IEnumerable<Profile> targetProfiles = Profile.GetProfiles(TargetPath);

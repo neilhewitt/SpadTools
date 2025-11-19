@@ -1,8 +1,9 @@
-﻿using ProfileManager.Devices;
-using System.Linq;
+﻿using System.Linq;
 using System.Xml;
+using SpadTools.Profiles.Events;
+using SpadTools.Profiles.Devices;
 
-namespace ProfileManager.Profiles
+namespace SpadTools.Profiles
 {
     public class Profile
     {

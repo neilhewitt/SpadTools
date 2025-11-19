@@ -1,7 +1,7 @@
-﻿using ProfileManager.Profiles;
-using System.Xml;
+﻿using System.Xml;
+using SpadTools.Profiles.Events;
 
-namespace ProfileManager.Devices
+namespace SpadTools.Profiles.Devices
 {
     public class DevicePage
     {
@@ -11,7 +11,6 @@ namespace ProfileManager.Devices
 
         public Guid ID { get; set; }
         public string Name { get; set; }
-        public XmlNode Node => _devicePageNode;
         public bool IsDefaultPage { get; set; }
 
         public DevicePage(XmlNode devicePageNode)

@@ -17,8 +17,7 @@ namespace ProfileManager.Commands
                             @Yellow{Specify either by device nickname (listed in nicknames.txt)}
                             @Yellow{or by a comma-delimited string giving vendorId, productId, 
                             deviceIndex and version}.
-    OR
-    --event:-e:<boundTo>    Replace just event bound to <boundTo>.";
+    --event|-e:<boundTo>    Replace just events bound to <boundTo> @Yellow{(comma-delimited list: E_VS,BUTTON_1 etc)}.";
 
         public override void Execute()
         {
@@ -45,15 +44,15 @@ namespace ProfileManager.Commands
             }
             
             string device = Arguments[("device", "d")]?.Value;
-            string @event = Arguments[("event", "e")]?.Value;
+            string[] events = Arguments[("event", "e")]?.GetValues();
 
-            if (string.IsNullOrWhiteSpace(device) && string.IsNullOrWhiteSpace(@event))
+            if (string.IsNullOrWhiteSpace(device))
             {
-                _output.WriteLine("@Red{Device or event is required.}");
+                _output.WriteLine("@Red{Device is required.}");
                 return;
             }
 
-            DeviceOperation.Replace(source, target, device, @event, _output, _makeBackups);
+            DeviceOperation.Replace(source, target, device, events, _output, _makeBackups);
         }
 
         public Replace(ArgumentCollection arguments, IOutput output, bool makeBackups) : base(arguments, output)

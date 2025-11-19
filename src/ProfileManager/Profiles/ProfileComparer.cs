@@ -1,4 +1,5 @@
 ﻿using ProfileManager.Commands;
+using ProfileManager.Comparers;
 using ProfileManager.Devices;
 using ProfileManager.Output;
 
@@ -6,9 +7,9 @@ namespace ProfileManager.Profiles
 {
     public class ProfileComparer
     {
-        public static void Compare(string sourcePath, string targetPath, string deviceId, string filter, string csvPath, bool noDisplay, IOutput output)
+        public static void Compare(string sourcePath, string targetPath, string deviceId, string filter, string csvPath, bool noDisplay, bool verboseOutput, IOutput output)
         {
-            ProfileComparer comparer = new(sourcePath, targetPath, deviceId, filter, csvPath, noDisplay, output);
+            ProfileComparer comparer = new(sourcePath, targetPath, deviceId, filter, csvPath, noDisplay, verboseOutput, output);
             comparer.Compare();
         }
 
@@ -20,6 +21,7 @@ namespace ProfileManager.Profiles
         public string DeviceId { get; private set; }
         public ComparisonResult? Filter { get; private set; }
         public bool DisplayOutput { get; private set; }
+        public bool VerboseOutput { get; private set; }
 
         public void Compare()
         {
@@ -76,26 +78,7 @@ namespace ProfileManager.Profiles
 
         private ProfileComparison DoComparison(Profile source, Profile target)
         {
-            List<DeviceComparison> deviceComparisons = new();
-            foreach (Device sourceDevice in source.Devices)
-            {
-                if (DeviceId is null || sourceDevice.ID == DeviceId || sourceDevice.Nickname == DeviceId)
-                {
-                    Device targetDevice = target.Devices.FirstOrDefault(d => 
-                        d.VendorID == sourceDevice.VendorID && 
-                        d.ProductID == sourceDevice.ProductID && 
-                        d.DeviceIndex == sourceDevice.DeviceIndex && 
-                        d.Version == sourceDevice.Version);
-
-                    if (targetDevice is not null)
-                    {
-                        DeviceComparison comparison = new DeviceComparison(sourceDevice, targetDevice);
-                        deviceComparisons.Add(comparison);
-                    }
-                }
-            }
-
-            return new ProfileComparison(source, target, deviceComparisons);
+            return new ProfileComparison(source, target, DeviceId);
         }
 
         private void DisplayComparisons(IEnumerable<ProfileComparison> comparisons)
@@ -103,32 +86,76 @@ namespace ProfileManager.Profiles
             _output.NewLine();
 
             int maxLeft, maxRight;
-            List<(string Left, string Right, string Comparison)> output = new();
+            Dictionary<string, List<(string Left, string Right, string Comparison)>> output = new();
 
             foreach (ProfileComparison comparison in comparisons)
             {
                 foreach (DeviceComparison deviceComparison in comparison.DeviceComparisons)
                 {
-                    string left = $"@Yellow{{{comparison.SourceProfile.Name}}} > {deviceComparison.DeviceID}";
-                    string right = $"@Yellow{{{comparison.TargetProfile.Name}}} > {deviceComparison.DeviceID}";
-                    string comparisonText = deviceComparison.DoesntExist ? "@Blue{not present}" : deviceComparison.IsEqual ? "@Green{same}" : "@Red{different}";
-                    if (Filter is null || deviceComparison.Result == Filter.Value)
+                    List<(string Left, string Right, string Comparison)> outputList = new();
+                    
+                    if (VerboseOutput)
                     {
-                        output.Add((left, right, comparisonText));
+                        int pageIndex = 0;
+                        foreach (DevicePageComparison pageComparison in deviceComparison.Pages)
+                        {
+                            foreach (EventComparison eventComparison in pageComparison.Events)
+                            { 
+                                string left = $"@Yellow{{{comparison.SourceProfile.Name}}} > {deviceComparison.DeviceID} > Page {pageIndex} > {eventComparison.EventID}";
+                                string right = $"@Yellow{{{comparison.TargetProfile.Name}}}";
+                                string comparisonText = 
+                                    pageComparison.DoesntExist ? "@Blue{page not present}" : 
+                                    eventComparison.DoesntExist ? "@Blue{not present}" : eventComparison.IsEqual ? "@Green{same}" : "@Red{different}";
+                                if (Filter is null || eventComparison.Result == Filter.Value)
+                                {
+                                    outputList.Add((left, right, comparisonText));
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        string left = $"@Yellow{{{comparison.SourceProfile.Name}}} > {deviceComparison.DeviceID}";
+                        string right = $"@Yellow{{{comparison.TargetProfile.Name}}}";
+                        string comparisonText = deviceComparison.DoesntExist ? "@Blue{not present}" : deviceComparison.IsEqual ? "@Green{same}" : "@Red{different}";
+                        if (Filter is null || deviceComparison.Result == Filter.Value)
+                        {
+                            outputList.Add((left, right, comparisonText));
+                        }
+                    }
+
+                    if (outputList.Count > 0)
+                    {
+                        if (output.ContainsKey(deviceComparison.DeviceID))
+                        {
+                            output[deviceComparison.DeviceID].AddRange(outputList);
+                        }
+                        else
+                        {
+                            output.Add(deviceComparison.DeviceID, outputList);
+                        }
                     }
                 }
-            }           
-
-            maxLeft = output.Max(x => x.Left.Length);
-            maxRight = output.Max(x => x.Right.Length);
-
-            foreach (var outputItem in output)
-            {
-                _output.Write($"{outputItem.Left.PadRight(maxLeft)} -> {outputItem.Right.PadRight(maxRight)} ");
-                _output.WriteLine(outputItem.Comparison);
             }
 
-            _output.NewLine();
+            if (output.Count > 0)
+            {
+                var outputLines = output.OrderBy(o => o.Key).SelectMany(o => o.Value).ToList();
+                maxLeft = outputLines.Max(x => x.Left.Length);
+                maxRight = outputLines.Max(x => x.Right.Length);
+
+                foreach (var outputItem in outputLines)
+                {
+                    _output.Write($"{outputItem.Left.PadRight(maxLeft)} -> {outputItem.Right.PadRight(maxRight)} ");
+                    _output.WriteLine(outputItem.Comparison);
+                }
+
+                _output.NewLine();
+            }
+            else
+            {
+                _output.WriteLine("@Red{No comparisons to display after applying filter.}");
+            }
         }
 
         private void WriteCSV(IEnumerable<ProfileComparison> comparisons, string csvPath)
@@ -150,7 +177,7 @@ namespace ProfileManager.Profiles
             File.WriteAllLines(csvPath, csvData);
         }
 
-        private ProfileComparer(string sourcePath, string targetPath, string deviceId, string filter, string csvPath, bool noDisplay, IOutput output)
+        private ProfileComparer(string sourcePath, string targetPath, string deviceId, string filter, string csvPath, bool noDisplay, bool verboseOutput, IOutput output)
         {
             SourceProfilePath = sourcePath;
             TargetProfilePath = targetPath ?? Directory.GetCurrentDirectory();
@@ -158,6 +185,7 @@ namespace ProfileManager.Profiles
             Filter = filter is not null ? Enum.Parse<ComparisonResult>(filter, true) : null;
             CSVPath = csvPath;
             DisplayOutput = !noDisplay;
+            VerboseOutput = verboseOutput;
             _output = output;
         }
     }

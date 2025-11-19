@@ -93,7 +93,7 @@ Available commands are:
                         {
                             bool hasPathValueOnly = (arg.Length > 2 && arg[1..3] == ":\\"); // ie c:\path\to\file
                             bool hasPathValueAndName = arg.Count(c => c == ':') > 1 && !arg.Contains(":\\"); // ie --path:c:\path\to\file
-                            bool hasName = !hasPathValueOnly && arg.Contains(":");
+                            bool hasName = !hasPathValueOnly && (arg.StartsWith("--") || arg.StartsWith("-") || arg.Contains(":"));
 
                             string[] argumentParts;
                             if (hasPathValueOnly || !hasName)

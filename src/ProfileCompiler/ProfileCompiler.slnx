@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="../Common/SpadTools.Profiles/SpadTools.Profiles.csproj" />
+  <Project Path="SpadTools.Compiler/SpadTools.Compiler.csproj" />
+</Solution>

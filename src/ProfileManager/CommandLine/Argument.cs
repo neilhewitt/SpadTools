@@ -10,6 +10,12 @@ namespace ProfileManager
         public bool IsValueOnly => Name == Value;
         public bool IsNamed => Name != Value;
 
+        public string[] GetValues(params char[] separators)
+        {
+            if (separators.Length == 0) separators = new [] { ',' };
+            return (Value ?? "").Split(separators, StringSplitOptions.RemoveEmptyEntries);
+        }
+
         override public string ToString()
         {
             return $"{Name}{(Value is not null ? ":" : "")}{Value}";
