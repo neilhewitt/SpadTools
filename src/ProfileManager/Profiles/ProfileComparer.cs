@@ -161,15 +161,21 @@ namespace ProfileManager.Profiles
         private void WriteCSV(IEnumerable<ProfileComparison> comparisons, string csvPath)
         {
             List<string> csvData = new();
-            csvData.Add("Source,Target,DeviceID,Status");
+            csvData.Add("Source,Target,DeviceID,PageID,EventID,Status");
             foreach(ProfileComparison comparison in comparisons)
             {
                 foreach(DeviceComparison deviceComparison in comparison.DeviceComparisons)
                 {
-                    string status = deviceComparison.DoesntExist ? "not present" : deviceComparison.IsEqual ? "same" : "different";
-                    if (Filter is null || deviceComparison.Result == Filter.Value)
+                    foreach (DevicePageComparison pageComparison in deviceComparison.Pages)
                     {
-                        csvData.Add($"{comparison.SourceProfile.Name},{comparison.TargetProfile.Name},{deviceComparison.DeviceID},{status}");
+                        foreach (EventComparison eventComparison in pageComparison.Events)
+                        {
+                            string status = eventComparison.DoesntExist ? "not present" : eventComparison.IsEqual ? "same" : "different";
+                            if (Filter is null || eventComparison.Result == Filter.Value)
+                            {
+                                csvData.Add($"{comparison.SourceProfile.Name},{comparison.TargetProfile.Name},{deviceComparison.DeviceID},{pageComparison.PageID},{eventComparison.EventID},{status}");
+                            }
+                        }
                     }
                 }
             }
